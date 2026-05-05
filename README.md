@@ -1,5 +1,4 @@
-
-# 🩺 Agentic Patient Triage System
+🩺 Agentic Patient Triage System
 
 ## Overview
 
