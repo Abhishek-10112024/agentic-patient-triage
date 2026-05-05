@@ -1,0 +1,52 @@
+# Byte-compiled files
+__pycache__/
+*.py[cod]
+*.pyc
+
+# Virtual environment
+venv/
+ENV/
+env/
+
+# Environment variables
+*.env
+*.env.*
+.env
+
+# Logs
+*.log
+logs/
+data/
+*.mp3
+*.wav
+temp.*
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Test coverage reports
+htmlcov/
+.coverage
+.coverage.*
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Cache files
+*.cache
+*.pytest_cache/
+*.mypy_cache/
+
+# Distribution/build files
+build/
+dist/
+*.egg-info/
+*.egg
+*.manifest
+*.spec
+
+# IDE-specific files
+.vscode/
+.idea/
+*.iml
