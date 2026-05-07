@@ -1,15 +1,27 @@
 import whisper
 from gtts import gTTS
-import os
 
-# Load Whisper model (first time will download)
-model = whisper.load_model("base")
+# Load Whisper model
+model = whisper.load_model("medium")
 
 
 def speech_to_text(audio_path: str):
     try:
-        result = model.transcribe(audio_path)
-        return result["text"]
+        result = model.transcribe(
+            audio_path,
+            language="en",
+            fp16=False,
+            temperature=0.0,
+            condition_on_previous_text=False  # 🔥 improves stability
+        )
+
+        text = result.get("text", "").strip()
+
+        if text:
+            text = text[0].upper() + text[1:]
+
+        return text if text else "ASR Error: Empty transcription"
+
     except Exception as e:
         return f"ASR Error: {str(e)}"
 
