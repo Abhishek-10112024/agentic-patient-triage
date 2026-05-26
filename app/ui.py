@@ -534,8 +534,6 @@ with record_tab:
         else:
             st.info("Save a recording to analyze it here.")
 
-if uploaded_file is not None:
-    temp_audio = write_temp_audio(uploaded_file)
 with upload_tab:
     left, right = st.columns([1.05, 0.95], gap="large")
 
@@ -549,25 +547,24 @@ with upload_tab:
         )
 
         if uploaded_file is not None:
-            suffix = Path(uploaded_file.name).suffix.lower()
-            if suffix not in {f".{file_type}" for file_type in SUPPORTED_AUDIO_TYPES}:
-                suffix = ".audio"
+            temp_audio = write_temp_audio(uploaded_file)
 
-            temp_audio = f"uploaded{suffix}"
-
-if "upload_audio" in st.session_state:
-    if st.button("🔍 Analyze Uploaded Audio", use_container_width=True):
-        output = analyze_audio(
-            st.session_state["upload_audio"],
-            "Processing uploaded audio..."
-        )
-        handle_output(output)
             with open(temp_audio, "wb") as f:
                 f.write(uploaded_file.getbuffer())
 
             st.session_state["upload_audio"] = temp_audio
             st.session_state["upload_name"] = uploaded_file.name
+
             st.success(f"Loaded {uploaded_file.name}")
+
+
+        if "upload_audio" in st.session_state:
+            if st.button("🔍 Analyze Uploaded Audio", use_container_width=True):
+                output = analyze_audio(
+                    st.session_state["upload_audio"],
+                    "Processing uploaded audio..."
+                )
+                handle_output(output)
 
     with right:
         st.subheader("Selected file")
