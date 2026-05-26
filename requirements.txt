@@ -6,6 +6,6 @@ openai
 groq
 openai-whisper
 gtts
-streamlit
+streamlit>=1.40
 sounddevice
 scipy

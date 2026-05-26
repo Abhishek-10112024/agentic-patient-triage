@@ -1,5 +1,6 @@
 import os
 import json
+import shutil
 
 
 RECORDINGS_DIR = "data/recordings"
@@ -17,7 +18,7 @@ def save_recording(file_path):
     idx = get_next_index(RECORDINGS_DIR)
     new_path = os.path.join(RECORDINGS_DIR, f"recording_{idx}.wav")
 
-    os.rename(file_path, new_path)
+    shutil.move(file_path, new_path)
 
     return new_path, idx
 
