@@ -5,7 +5,6 @@ import html
 import os
 import sys
 import time
-import wave
 from pathlib import Path
 
 from agents.root_agent import TriageAgent
@@ -16,15 +15,6 @@ from utils.storage import save_recording, save_response
 # -------------------------------
 agent = TriageAgent()
 import streamlit as st
-
-# Safe import: the app still supports upload-only mode if WebRTC is unavailable.
-try:
-    import av
-    from streamlit_webrtc import AudioProcessorBase, WebRtcMode, webrtc_streamer
-
-    WEBRTC_AVAILABLE = True
-except Exception:
-    WEBRTC_AVAILABLE = False
 
 APP_DIR = Path(__file__).resolve().parent
 if str(APP_DIR) not in sys.path:
@@ -64,7 +54,7 @@ st.markdown(
 
         .block-container {
             max-width: 1180px;
-            padding-top: 2rem;
+            padding-top: 4.5rem;
             padding-bottom: 3rem;
         }
 
@@ -202,17 +192,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-
-if WEBRTC_AVAILABLE:
-
-    class AudioProcessor(AudioProcessorBase):
-        def __init__(self):
-            self.frames = []
-
-        def recv(self, frame: av.AudioFrame) -> av.AudioFrame:
-            self.frames.append(frame)
-            return frame
-
 @st.cache_resource
 def get_agent():
     return TriageAgent()
@@ -240,7 +219,7 @@ def severity_badge(severity):
 
 
 def render_status_strip():
-    live_state = "Available" if WEBRTC_AVAILABLE else "Upload only"
+    live_state = "Available"
     env_state = "Configured" if os.getenv("GROQ_API_KEY") else "Needs API key"
 
     st.markdown(
@@ -474,108 +453,52 @@ with st.sidebar:
     st.divider()
     st.caption("Environment")
     st.write("GROQ_API_KEY:", "Set" if os.getenv("GROQ_API_KEY") else "Missing")
-    st.write("Live recording:", "Available" if WEBRTC_AVAILABLE else "Unavailable")
+    st.write("Live recording:", "Available")
 
 
-record_tab, upload_tab = st.tabs(["Record audio", "Upload WAV"])
+st.markdown("## Upload Audio")
 
-with record_tab:
-    left, right = st.columns([1.05, 0.95], gap="large")
+left, right = st.columns([1.05, 0.95], gap="large")
 
-    with left:
-        st.subheader("Live recording")
+with left:
+    st.subheader("Upload audio")
+    st.caption("Supported formats: WAV, MP3, M4A, MP4, MPEG, WEBM, OGG, FLAC, AAC")
+    uploaded_file = st.file_uploader(
+        "Choose an audio file",
+        type=SUPPORTED_AUDIO_TYPES,
+        label_visibility="collapsed",
+    )
 
-        if WEBRTC_AVAILABLE:
-            ctx = webrtc_streamer(
-                key="audio",
-                mode=WebRtcMode.SENDRECV,
-                audio_processor_factory=AudioProcessor,
-                media_stream_constraints={"audio": True, "video": False},
+    if uploaded_file is not None:
+        temp_audio = write_temp_audio(uploaded_file)
+
+        with open(temp_audio, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+
+        st.session_state["upload_audio"] = temp_audio
+        st.session_state["upload_name"] = uploaded_file.name
+
+        st.success(f"Loaded {uploaded_file.name}")
+
+
+    if "upload_audio" in st.session_state:
+        if st.button("🔍 Analyze Uploaded Audio", use_container_width=True):
+            output = analyze_audio(
+                st.session_state["upload_audio"],
+                "Processing uploaded audio..."
             )
+            handle_output(output)
 
-            if ctx.audio_processor:
-                st.caption("Recording is active while the WebRTC control is running.")
+with right:
+    st.subheader("Selected file")
 
-                if st.button("Save recording", use_container_width=True):
-                    frames = ctx.audio_processor.frames
+    if "upload_audio" in st.session_state:
+        st.caption(st.session_state.get("upload_name", "uploaded.wav"))
+        st.audio(st.session_state["upload_audio"])
 
-                    if frames:
-                        temp_audio = "live_recording.wav"
-
-                        with wave.open(temp_audio, "wb") as wf:
-                            wf.setnchannels(1)
-                            wf.setsampwidth(2)
-                            wf.setframerate(48000)
-
-                            for frame in frames:
-                                wf.writeframes(frame.to_ndarray().tobytes())
-
-                        saved_path, idx = save_recording(temp_audio)
-
-                        st.session_state["live_audio"] = saved_path
-                        st.session_state["live_idx"] = idx
-
-                        st.success(f"Saved as recording_{idx}.wav")
-                    else:
-                        st.warning("No audio frames were captured yet.")
-        else:
-            st.info("Live recording is not available in this environment. Use the upload tab.")
-
-    with right:
-        st.subheader("Current recording")
-
-        if "live_audio" in st.session_state:
-            st.audio(st.session_state["live_audio"])
-
-            if st.button("Analyze recording", type="primary", use_container_width=True):
-                render_progress("Analyzing recording...")
-                output = agent.process_audio(st.session_state["live_audio"])
-                handle_output(output, st.session_state["live_idx"])
-        else:
-            st.info("Save a recording to analyze it here.")
-
-with upload_tab:
-    left, right = st.columns([1.05, 0.95], gap="large")
-
-    with left:
-        st.subheader("Upload audio")
-        st.caption("Supported formats: WAV, MP3, M4A, MP4, MPEG, WEBM, OGG, FLAC, AAC")
-        uploaded_file = st.file_uploader(
-            "Choose an audio file",
-            type=SUPPORTED_AUDIO_TYPES,
-            label_visibility="collapsed",
-        )
-
-        if uploaded_file is not None:
-            temp_audio = write_temp_audio(uploaded_file)
-
-            with open(temp_audio, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-
-            st.session_state["upload_audio"] = temp_audio
-            st.session_state["upload_name"] = uploaded_file.name
-
-            st.success(f"Loaded {uploaded_file.name}")
-
-
-        if "upload_audio" in st.session_state:
-            if st.button("🔍 Analyze Uploaded Audio", use_container_width=True):
-                output = analyze_audio(
-                    st.session_state["upload_audio"],
-                    "Processing uploaded audio..."
-                )
-                handle_output(output)
-
-    with right:
-        st.subheader("Selected file")
-
-        if "upload_audio" in st.session_state:
-            st.caption(st.session_state.get("upload_name", "uploaded.wav"))
-            st.audio(st.session_state["upload_audio"])
-
-            if st.button("Analyze uploaded audio", type="primary", use_container_width=True):
-                render_progress("Processing uploaded audio...")
-                output = agent.process_audio(st.session_state["upload_audio"])
-                handle_output(output)
-        else:
-            st.info("Upload an audio file to begin.")
+        if st.button("Analyze uploaded audio", type="primary", use_container_width=True):
+            render_progress("Processing uploaded audio...")
+            output = agent.process_audio(st.session_state["upload_audio"])
+            handle_output(output)
+    else:
+        st.info("Upload an audio file to begin.")
