@@ -1,30 +1,10 @@
 import streamlit as st
-import os
-import wave
+import hashlib
+import tempfile
 import time
-
-# Safe import (prevents crash if WebRTC breaks)
-try:
-    import av
-    from streamlit_webrtc import webrtc_streamer, AudioProcessorBase, WebRtcMode
-    WEBRTC_AVAILABLE = True
-except:
-    WEBRTC_AVAILABLE = False
 
 from agents.root_agent import TriageAgent
 from utils.storage import save_recording, save_response
-
-# -------------------------------
-# 🎤 Audio Processor
-# -------------------------------
-if WEBRTC_AVAILABLE:
-    class AudioProcessor(AudioProcessorBase):
-        def __init__(self):
-            self.frames = []
-
-        def recv(self, frame: av.AudioFrame) -> av.AudioFrame:
-            self.frames.append(frame)
-            return frame
 
 # -------------------------------
 # 🚀 Initialize
@@ -47,6 +27,33 @@ st.markdown(
 st.warning("⚠️ Speak clearly in a quiet environment for best results.")
 
 st.divider()
+
+# -------------------------------
+# 🎧 Audio Helpers
+# -------------------------------
+def write_temp_audio(audio_file, suffix=".wav"):
+    audio_file.seek(0)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(audio_file.read())
+        return tmp.name
+
+
+def analyze_audio(audio_path, status_text):
+    progress = st.progress(0)
+    status = st.empty()
+
+    for i in range(100):
+        time.sleep(0.01)
+        progress.progress(i + 1)
+        status.text(status_text)
+
+    output = agent.process_audio(audio_path)
+
+    status.empty()
+    progress.empty()
+
+    return output
+
 
 # -------------------------------
 # 🧠 Output Handler
@@ -100,59 +107,34 @@ def handle_output(output, idx=None):
 # -------------------------------
 st.subheader("🎤 Live Recording")
 
-if WEBRTC_AVAILABLE:
-    ctx = webrtc_streamer(
-        key="audio",
-        mode=WebRtcMode.SENDRECV,
-        audio_processor_factory=AudioProcessor,
-        media_stream_constraints={"audio": True, "video": False},
-    )
+if hasattr(st, "audio_input"):
+    live_audio = st.audio_input("Record symptoms from your microphone")
 
-    if ctx.audio_processor:
-        st.caption("🔴 Recording... Click STOP in the player above when done.")
+    if live_audio is not None:
+        live_bytes = live_audio.getvalue()
+        live_hash = hashlib.sha256(live_bytes).hexdigest()
 
-        if st.button("💾 Save Recording"):
-            frames = ctx.audio_processor.frames
+        if st.session_state.get("live_audio_hash") != live_hash:
+            st.session_state["live_audio_hash"] = live_hash
+            st.session_state.pop("live_audio", None)
+            st.session_state.pop("live_idx", None)
 
-            if frames:
-                temp_audio = "live_recording.wav"
+        st.audio(live_bytes, format="audio/wav")
 
-                with wave.open(temp_audio, "wb") as wf:
-                    wf.setnchannels(1)
-                    wf.setsampwidth(2)
-                    wf.setframerate(48000)
+        if st.button("🔍 Analyze Live Recording", use_container_width=True):
+            temp_audio = write_temp_audio(live_audio)
+            saved_path, idx = save_recording(temp_audio)
 
-                    for frame in frames:
-                        wf.writeframes(frame.to_ndarray().tobytes())
+            st.session_state["live_audio"] = saved_path
+            st.session_state["live_idx"] = idx
 
-                saved_path, idx = save_recording(temp_audio)
+            output = analyze_audio(saved_path, "Analyzing live recording...")
+            handle_output(output, idx)
 
-                st.session_state["live_audio"] = saved_path
-                st.session_state["live_idx"] = idx
-
-                st.success(f"Saved as recording_{idx}.wav")
-                st.audio(saved_path)
-
-    if "live_audio" in st.session_state:
-        if st.button("🔍 Analyze Recording", use_container_width=True):
-
-            progress = st.progress(0)
-            status = st.empty()
-
-            for i in range(100):
-                time.sleep(0.01)
-                progress.progress(i + 1)
-                status.text("Analyzing audio...")
-
-            output = agent.process_audio(st.session_state["live_audio"])
-
-            status.empty()
-            progress.empty()
-
-            handle_output(output, st.session_state["live_idx"])
-
+        if "live_audio" in st.session_state:
+            st.caption(f"Saved as recording_{st.session_state['live_idx']}.wav")
 else:
-    st.info("Live recording not supported. Please upload audio.")
+    st.info("Live recording requires Streamlit 1.40 or newer. Please upload audio.")
 
 st.divider()
 
@@ -164,10 +146,7 @@ st.subheader("📁 Upload Audio")
 uploaded_file = st.file_uploader("Upload WAV file", type=["wav"])
 
 if uploaded_file is not None:
-    temp_audio = "uploaded.wav"
-
-    with open(temp_audio, "wb") as f:
-        f.write(uploaded_file.read())
+    temp_audio = write_temp_audio(uploaded_file)
 
     st.audio(temp_audio)
 
@@ -175,18 +154,8 @@ if uploaded_file is not None:
 
 if "upload_audio" in st.session_state:
     if st.button("🔍 Analyze Uploaded Audio", use_container_width=True):
-
-        progress = st.progress(0)
-        status = st.empty()
-
-        for i in range(100):
-            time.sleep(0.01)
-            progress.progress(i + 1)
-            status.text("Processing uploaded audio...")
-
-        output = agent.process_audio(st.session_state["upload_audio"])
-
-        status.empty()
-        progress.empty()
-
+        output = analyze_audio(
+            st.session_state["upload_audio"],
+            "Processing uploaded audio..."
+        )
         handle_output(output)

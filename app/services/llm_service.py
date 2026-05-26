@@ -2,6 +2,7 @@ import os
 from groq import Groq
 from dotenv import load_dotenv
 import json
+import re
 from models.triage_schema import TriageResponse
 from services.guardrails import apply_guardrails
 
@@ -73,6 +74,20 @@ CRITICAL RULES:
 """
 
 
+def parse_llm_json(raw_output: str):
+    cleaned_output = raw_output.strip()
+
+    fenced_match = re.search(
+        r"```(?:json)?\s*(.*?)\s*```",
+        cleaned_output,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    if fenced_match:
+        cleaned_output = fenced_match.group(1).strip()
+
+    return json.loads(cleaned_output)
+
+
 def analyze_patient(text: str):
     try:
         completion = client.chat.completions.create(
@@ -87,7 +102,7 @@ def analyze_patient(text: str):
         raw_output = completion.choices[0].message.content
 
         # 🔒 Step 1: Convert string → JSON
-        parsed_output = json.loads(raw_output)
+        parsed_output = parse_llm_json(raw_output)
 
         # 🔒 Step 2: Validate using Pydantic
         validated_output = TriageResponse(**parsed_output)
