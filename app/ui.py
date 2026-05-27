@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 import streamlit as st
 import hashlib
 import tempfile
@@ -7,15 +8,9 @@ import sys
 import time
 from pathlib import Path
 
-from agents.root_agent import TriageAgent
-from utils.storage import save_recording, save_response
-
 # -------------------------------
-# 🚀 Initialize
+# 🛠 Path & Imports
 # -------------------------------
-agent = TriageAgent()
-import streamlit as st
-
 APP_DIR = Path(__file__).resolve().parent
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
@@ -23,17 +18,17 @@ if str(APP_DIR) not in sys.path:
 from agents.root_agent import TriageAgent
 from utils.storage import save_recording, save_response
 
-
 SUPPORTED_AUDIO_TYPES = ["wav", "mp3", "m4a", "mp4", "mpeg", "mpga", "webm", "ogg", "flac", "aac"]
 
-
+# -------------------------------
+# 🚀 Page Config
+# -------------------------------
 st.set_page_config(
     page_title="AI Patient Triage",
     page_icon="🩺",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
-
 
 st.markdown(
     """
@@ -192,14 +187,19 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# -------------------------------
+# 🚀 Agent (cached singleton)
+# -------------------------------
 @st.cache_resource
 def get_agent():
     return TriageAgent()
 
-
 agent = get_agent()
 
 
+# -------------------------------
+# 🔧 Helpers
+# -------------------------------
 def safe_text(value, fallback="Not available"):
     if value is None or value == "":
         return fallback
@@ -214,7 +214,6 @@ def severity_badge(severity):
         badge_class = "badge-severe"
     else:
         badge_class = "badge-neutral"
-
     return f"<span class='badge {badge_class}'>{safe_text(severity)}</span>"
 
 
@@ -243,19 +242,6 @@ def render_status_strip():
     )
 
 
-def render_progress(label):
-    progress = st.progress(0)
-    status = st.empty()
-
-    for value in range(100):
-        time.sleep(0.01)
-        progress.progress(value + 1)
-        status.caption(label)
-
-    status.empty()
-    progress.empty()
-
-
 def render_summary(summary):
     if not summary:
         return
@@ -263,24 +249,21 @@ def render_summary(summary):
     if hasattr(summary, "dict"):
         summary = summary.dict()
 
-    fields = [
-        ("Symptoms", summary.get("symptoms")),
-        ("Duration", summary.get("duration")),
-        ("Severity reason", summary.get("severity_reason")),
-        ("Recommendation", summary.get("recommendation")),
-    ]
+    col1, col2 = st.columns(2)
 
-    cards = "".join(
-        f"""
-        <div class="summary-card">
-            <div class="card-label">{safe_text(label)}</div>
-            <div>{safe_text(value)}</div>
-        </div>
-        """
-        for label, value in fields
-    )
+    with col1:
+        st.markdown("**Symptoms**")
+        st.info(summary.get("symptoms") or "Not available")
 
-    st.markdown(f"<div class='summary-grid'>{cards}</div>", unsafe_allow_html=True)
+        st.markdown("**Severity reason**")
+        st.info(summary.get("severity_reason") or "Not available")
+
+    with col2:
+        st.markdown("**Duration**")
+        st.info(summary.get("duration") or "Not available")
+
+        st.markdown("**Recommendation**")
+        st.info(summary.get("recommendation") or "Not available")
 
 
 def render_audio_response(audio_path):
@@ -407,6 +390,35 @@ def handle_output(output, idx=None):
         save_response(output, idx)
 
 
+# ===============================
+# 🖥 Page Layout
+# ===============================
+
+# Hero banner
+st.markdown(
+    """
+    <section class="app-hero">
+        <h1>AI Patient Triage</h1>
+        <p>Capture or upload a patient symptom report, then review the transcript, triage category, severity, guidance, and escalation status in one place.</p>
+    </section>
+    """,
+    unsafe_allow_html=True,
+)
+
+render_status_strip()
+
+# Sidebar
+with st.sidebar:
+    st.header("Session")
+    st.caption("Use this tool for early triage support. Severe symptoms should be escalated to a clinician.")
+    st.divider()
+    st.caption("Environment")
+    st.write("GROQ_API_KEY:", "Set" if os.getenv("GROQ_API_KEY") else "Missing")
+    st.write("Live recording:", "Available")
+
+# -------------------------------
+# 🎙 Live Recording
+# -------------------------------
 if hasattr(st, "audio_input"):
     live_audio = st.audio_input("Record symptoms from your microphone")
 
@@ -435,29 +447,11 @@ if hasattr(st, "audio_input"):
             st.caption(f"Saved as recording_{st.session_state['live_idx']}.wav")
 else:
     st.info("Live recording requires Streamlit 1.40 or newer. Please upload audio.")
-st.markdown(
-    """
-    <section class="app-hero">
-        <h1>AI Patient Triage</h1>
-        <p>Capture or upload a patient symptom report, then review the transcript, triage category, severity, guidance, and escalation status in one place.</p>
-    </section>
-    """,
-    unsafe_allow_html=True,
-)
 
-render_status_strip()
-
-with st.sidebar:
-    st.header("Session")
-    st.caption("Use this tool for early triage support. Severe symptoms should be escalated to a clinician.")
-    st.divider()
-    st.caption("Environment")
-    st.write("GROQ_API_KEY:", "Set" if os.getenv("GROQ_API_KEY") else "Missing")
-    st.write("Live recording:", "Available")
-
-
-st.markdown("## Upload Audio")
-
+# -------------------------------
+# 📁 Upload Audio
+# -------------------------------
+st.markdown("---")
 left, right = st.columns([1.05, 0.95], gap="large")
 
 with left:
@@ -480,9 +474,8 @@ with left:
 
         st.success(f"Loaded {uploaded_file.name}")
 
-
     if "upload_audio" in st.session_state:
-        if st.button("🔍 Analyze Uploaded Audio", use_container_width=True):
+        if st.button("🔍 Analyze Uploaded Audio", use_container_width=True, type="primary"):
             output = analyze_audio(
                 st.session_state["upload_audio"],
                 "Processing uploaded audio..."
@@ -495,10 +488,5 @@ with right:
     if "upload_audio" in st.session_state:
         st.caption(st.session_state.get("upload_name", "uploaded.wav"))
         st.audio(st.session_state["upload_audio"])
-
-        if st.button("Analyze uploaded audio", type="primary", use_container_width=True):
-            render_progress("Processing uploaded audio...")
-            output = agent.process_audio(st.session_state["upload_audio"])
-            handle_output(output)
     else:
         st.info("Upload an audio file to begin.")
