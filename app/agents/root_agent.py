@@ -9,7 +9,7 @@ class TriageAgent:
     def __init__(self):
         self.email_tool = MCPEmailTool()
 
-    def process_audio(self, audio_path: str):
+    def process_audio(self, audio_path: str, audio_output_path: str):
         result = {}
 
         # Step 1: Speech-to-Text
@@ -37,7 +37,7 @@ class TriageAgent:
             result["email_status"] = email_status
 
         # Step 5: Text-to-Speech
-        audio_output = text_to_speech(llm_output.get("response", ""))
+        audio_output = text_to_speech(llm_output.get("response", ""), audio_output_path)
         result["audio_output"] = audio_output
 
         return result

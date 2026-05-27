@@ -1,4 +1,6 @@
+# pyrefly: ignore [missing-import]
 import whisper
+# pyrefly: ignore [missing-import]
 from gtts import gTTS
 
 # Load Whisper model
@@ -26,7 +28,7 @@ def speech_to_text(audio_path: str):
         return f"ASR Error: {str(e)}"
 
 
-def text_to_speech(text: str, output_path="response.mp3"):
+def text_to_speech(text: str, output_path: str) -> str:
     try:
         tts = gTTS(text=text, lang='en')
         tts.save(output_path)

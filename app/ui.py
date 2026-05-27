@@ -16,7 +16,7 @@ if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
 from agents.root_agent import TriageAgent
-from utils.storage import save_recording, save_response
+from utils.storage import make_session_id, save_recording, save_response, get_response_audio_path
 
 SUPPORTED_AUDIO_TYPES = ["wav", "mp3", "m4a", "mp4", "mpeg", "mpga", "webm", "ogg", "flac", "aac"]
 
@@ -290,7 +290,7 @@ def write_temp_audio(audio_file, suffix=".wav"):
         return tmp.name
 
 
-def analyze_audio(audio_path, status_text):
+def analyze_audio(audio_path, status_text, audio_output_path):
     progress = st.progress(0)
     status = st.empty()
 
@@ -299,7 +299,7 @@ def analyze_audio(audio_path, status_text):
         progress.progress(i + 1)
         status.text(status_text)
 
-    output = agent.process_audio(audio_path)
+    output = agent.process_audio(audio_path, audio_output_path)
 
     status.empty()
     progress.empty()
@@ -310,7 +310,7 @@ def analyze_audio(audio_path, status_text):
 # -------------------------------
 # 🧠 Output Handler
 # -------------------------------
-def handle_output(output, idx=None):
+def handle_output(output, tmp_audio_path=None, session_id=None):
     st.markdown("### Analysis result")
 
     transcription = output.get("transcription", "")
@@ -386,8 +386,9 @@ def handle_output(output, idx=None):
     with st.expander("Voice response", expanded=False):
         render_audio_response(output.get("audio_output"))
 
-    if idx:
-        save_response(output, idx)
+    if session_id and tmp_audio_path and "error" not in output:
+        save_recording(tmp_audio_path, session_id)
+        save_response(output, session_id)
 
 
 # ===============================
@@ -434,17 +435,19 @@ if hasattr(st, "audio_input"):
         st.audio(live_bytes, format="audio/wav")
 
         if st.button("🔍 Analyze Live Recording", use_container_width=True):
-            temp_audio = write_temp_audio(live_audio)
-            saved_path, idx = save_recording(temp_audio)
+            tmp_audio = write_temp_audio(live_audio)
+            session_id = make_session_id()
+            audio_out = get_response_audio_path(session_id)
 
-            st.session_state["live_audio"] = saved_path
-            st.session_state["live_idx"] = idx
+            output = analyze_audio(tmp_audio, "Analyzing live recording...", audio_out)
+            handle_output(output, tmp_audio_path=tmp_audio, session_id=session_id)
 
-            output = analyze_audio(saved_path, "Analyzing live recording...")
-            handle_output(output, idx)
+            if "error" not in output:
+                st.session_state["live_audio"] = f"data/recordings/session_{session_id}_recording.wav"
+                st.session_state["live_session_id"] = session_id
 
         if "live_audio" in st.session_state:
-            st.caption(f"Saved as recording_{st.session_state['live_idx']}.wav")
+            st.caption(f"Saved as session_{st.session_state['live_session_id']}_recording.wav")
 else:
     st.info("Live recording requires Streamlit 1.40 or newer. Please upload audio.")
 
@@ -476,11 +479,14 @@ with left:
 
     if "upload_audio" in st.session_state:
         if st.button("🔍 Analyze Uploaded Audio", use_container_width=True, type="primary"):
+            session_id = make_session_id()
+            audio_out = get_response_audio_path(session_id)
             output = analyze_audio(
                 st.session_state["upload_audio"],
-                "Processing uploaded audio..."
+                "Processing uploaded audio...",
+                audio_out,
             )
-            handle_output(output)
+            handle_output(output, tmp_audio_path=st.session_state["upload_audio"], session_id=session_id)
 
 with right:
     st.subheader("Selected file")
