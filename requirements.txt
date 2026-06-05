@@ -9,3 +9,4 @@ gtts
 streamlit>=1.40
 sounddevice
 scipy
+pytest

@@ -73,6 +73,21 @@ EMAIL_PASS=your_app_password
 streamlit run app/ui.py
 ```
 
+## 🧑‍💻 Conductor Demo
+
+This repo includes a Conductor-ready demo setup for parallel enterprise development workflows:
+
+* `conductor.json` defines setup, run, and archive scripts.
+* `.worktreeinclude` copies local gitignored config such as `.env` into new workspaces.
+* `docs/conductor-demo.md` contains a live manager-facing walkthrough.
+* Focused tests cover guardrail and input-validation behavior.
+
+Run the safety tests with:
+
+```bash
+PYTHONPATH=app pytest
+```
+
 ---
 
 ## 🧪 Example Flows
